@@ -1,0 +1,38 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "ef8946bbeb92c6563387dfd1267bb3b3"
+name = "LS AI Portrait POD Flow"
+application_url = "https://gray-studio-inc-app.vercel.app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-10"
+
+# TEMPORARILY DISABLED: orders/paid requires "Protected customer data access" approval
+# in the Partner Dashboard (Apps -> LS AI Portrait POD Flow -> API access). Once granted
+# (instant for dev stores), restore this block and add read_orders back to scopes:
+#   [[webhooks.subscriptions]]
+#   topics = [ "orders/paid" ]
+#   uri = "/webhooks/orders/paid"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,write_app_proxy"
+
+[auth]
+redirect_urls = [
+  "https://gray-studio-inc-app.vercel.app/auth/callback",
+  "https://gray-studio-inc-app.vercel.app/auth/login/callback",
+  "https://gray-studio-inc-app.vercel.app/api/auth/callback"
+]
+
+# Absolute URL including /apps/portrait: Shopify forwards the part of the storefront path
+# after /apps/portrait — so /apps/portrait/generate hits this app at /apps/portrait/generate,
+# matching the apps.portrait.* route files. (Relative URLs only work during `shopify app dev`.)
+[app_proxy]
+url = "https://gray-studio-inc-app.vercel.app/apps/portrait"
+subpath = "portrait"
+prefix = "apps"

@@ -1,0 +1,100 @@
+<div
+  class="pp-widget"
+  data-pp-widget
+  data-proxy-path="/apps/portrait"
+  data-scene-ids="{{ block.settings.scene_ids }}"
+  data-scene-labels="{{ block.settings.scene_labels }}"
+>
+  <div class="pp-step" data-pp-step="scene">
+    <h3 class="pp-heading">{{ block.settings.scene_heading }}</h3>
+    <div class="pp-scenes" data-pp-scenes role="radiogroup"></div>
+  </div>
+
+  <div class="pp-step" data-pp-step="upload" hidden>
+    <h3 class="pp-heading">{{ block.settings.upload_heading }}</h3>
+    <label class="pp-upload-label">
+      <input type="file" accept="image/*" class="pp-file-input" data-pp-file-input>
+      <span data-pp-file-hint>Choose a photo…</span>
+    </label>
+    <div class="pp-upload-preview" data-pp-upload-preview></div>
+    <button type="button" class="pp-btn" data-pp-generate-btn disabled>Generate previews</button>
+  </div>
+
+  <div class="pp-step" data-pp-step="loading" hidden>
+    <div class="pp-spinner" aria-live="polite">Creating your portrait…</div>
+  </div>
+
+  <div class="pp-step" data-pp-step="preview" hidden>
+    <h3 class="pp-heading">Pick your favorite</h3>
+    <div class="pp-preview-grid" data-pp-preview-grid></div>
+  </div>
+
+  <div class="pp-step" data-pp-step="frame" hidden>
+    <h3 class="pp-heading">Choose a frame</h3>
+    <div class="pp-frames" data-pp-frames></div>
+    <button type="button" class="pp-btn" data-pp-add-to-cart-btn disabled>Add to cart</button>
+  </div>
+
+  <div class="pp-error" data-pp-error role="alert" hidden></div>
+
+  <script type="application/json" data-pp-frame-data>
+    [
+      {% if block.settings.frame_collection %}
+        {% for product in block.settings.frame_collection.products %}
+          {
+            "id": {{ product.id | json }},
+            "title": {{ product.title | json }},
+            "handle": {{ product.handle | json }},
+            "image": {{ product.featured_image | image_url: width: 400 | json }},
+            "variants": [
+              {% for variant in product.variants %}
+                {
+                  "id": {{ variant.id | json }},
+                  "title": {{ variant.title | json }},
+                  "price": {{ variant.price | json }},
+                  "available": {{ variant.available | json }}
+                }{% unless forloop.last %},{% endunless %}
+              {% endfor %}
+            ]
+          }{% unless forloop.last %},{% endunless %}
+        {% endfor %}
+      {% endif %}
+    ]
+  </script>
+</div>
+
+{{ 'pet-portrait-widget.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'pet-portrait-widget.js' | asset_url }}" defer="defer"></script>
+
+{% schema %}
+{
+  "name": "Pet Portrait Studio",
+  "target": "section",
+  "settings": [
+    { "type": "header", "content": "Text" },
+    { "type": "text", "id": "scene_heading", "label": "Scene picker heading", "default": "Choose a scene" },
+    { "type": "text", "id": "upload_heading", "label": "Upload heading", "default": "Upload your dog's photo" },
+    { "type": "header", "content": "Scenes" },
+    {
+      "type": "text",
+      "id": "scene_ids",
+      "label": "Scene IDs (comma separated)",
+      "default": "paris,provence",
+      "info": "Placeholder until the client's final scene list is confirmed — see project notes."
+    },
+    {
+      "type": "text",
+      "id": "scene_labels",
+      "label": "Scene labels (comma separated, same order as IDs)",
+      "default": "Paris,Provence"
+    },
+    { "type": "header", "content": "Frames" },
+    {
+      "type": "collection",
+      "id": "frame_collection",
+      "label": "Frame collection",
+      "info": "Products in this collection are shown as frame choices; each product's variants become size options."
+    }
+  ]
+}
+{% endschema %}
