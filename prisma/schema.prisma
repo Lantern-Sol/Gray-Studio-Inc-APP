@@ -45,6 +45,24 @@ model PortraitJob {
   previews     PortraitPreview[]
 }
 
+// One row per portrait line item in a paid order — powers the in-app Orders page
+// and records the POD handoff result (or why it was skipped/failed).
+model PodOrderLog {
+  id            String   @id @default(cuid())
+  shop          String
+  orderId       String
+  orderName     String?
+  variantId     String?
+  quantity      Int      @default(1)
+  previewId     String?
+  scene         String?
+  printFileUrl  String?
+  podOrderId    String?
+  status        String // submitted | error | skipped_no_preview
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+}
+
 // Images live in Vercel Blob; the DB stores their URLs.
 // `cleanUrl` is the unwatermarked print file — never sent to the storefront; only read
 // server-side (orders/paid webhook -> POD handoff). Blob paths get a random suffix so the
