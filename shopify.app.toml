@@ -11,16 +11,15 @@ automatically_update_urls_on_dev = true
 [webhooks]
 api_version = "2026-10"
 
-# TEMPORARILY DISABLED: orders/paid requires "Protected customer data access" approval
-# in the Partner Dashboard (Apps -> LS AI Portrait POD Flow -> API access). Once granted
-# (instant for dev stores), restore this block and add read_orders back to scopes:
-#   [[webhooks.subscriptions]]
-#   topics = [ "orders/paid" ]
-#   uri = "/webhooks/orders/paid"
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "/webhooks/orders/paid"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_app_proxy"
+# read_orders is protected customer data — Shopify surfaces the "Protected customer data
+# access" approval card once this scope is declared and the app version is deployed.
+scopes = "write_products,write_app_proxy,read_orders"
 
 [auth]
 redirect_urls = [
