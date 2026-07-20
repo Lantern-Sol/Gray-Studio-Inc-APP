@@ -17,31 +17,47 @@ import sharp from "sharp";
 // ---------------------------------------------------------------------------
 
 const FAL_QUEUE_URL = "https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit";
-const NUM_VARIANTS = 2; // previews per upload; each costs ~$0.03
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 120000;
 
+const IDENTITY_PREFIX =
+  "Transform this photo into an elegant fine-art portrait of the exact same dog, " +
+  "keeping its face, fur colors and markings faithful to the original. ";
+
+// Each scene gets two deliberately different prompts so the customer's preview
+// options feel like a real choice (one fal request per prompt, ~$0.03 each).
 const SCENE_PROMPTS = {
-  paris:
-    "Transform this photo into an elegant fine-art portrait of the exact same dog, " +
-    "keeping its face, fur colors and markings faithful to the original. " +
-    "Place the dog on a charming Parisian street at golden hour with the Eiffel Tower " +
-    "softly visible in the background, Haussmann rooftops, warm romantic light, " +
-    "painterly oil-painting style, gallery quality, high detail.",
-  provence:
-    "Transform this photo into an elegant fine-art portrait of the exact same dog, " +
-    "keeping its face, fur colors and markings faithful to the original. " +
-    "Place the dog in the lavender fields of Provence, rustic French countryside, " +
-    "warm late-afternoon sunlight, rolling hills and a stone farmhouse in the distance, " +
-    "painterly oil-painting style, gallery quality, high detail.",
+  paris: [
+    IDENTITY_PREFIX +
+      "Place the dog on a Parisian balcony at golden hour with the Eiffel Tower " +
+      "softly visible in the background, Haussmann rooftops, warm romantic light, " +
+      "painterly oil-painting style, gallery quality, high detail.",
+    IDENTITY_PREFIX +
+      "Place the dog seated outside a charming Parisian café on a cobblestone street " +
+      "in soft morning daylight, pastel tones, bistro chairs and flower boxes around, " +
+      "impressionist painting style, gallery quality, high detail.",
+  ],
+  provence: [
+    IDENTITY_PREFIX +
+      "Place the dog in the lavender fields of Provence at warm late-afternoon light, " +
+      "rolling purple hills and a stone farmhouse in the distance, " +
+      "painterly oil-painting style, gallery quality, high detail.",
+    IDENTITY_PREFIX +
+      "Place the dog in a rustic Provençal village square in soft daylight, " +
+      "sunflowers and ochre stone houses, shuttered windows, market morning atmosphere, " +
+      "impressionist painting style, gallery quality, high detail.",
+  ],
 };
 
-function promptFor(scene) {
+function promptsFor(scene) {
   return (
-    SCENE_PROMPTS[scene] ??
-    `Transform this photo into an elegant fine-art portrait of the exact same dog, ` +
-      `keeping its face, fur colors and markings faithful to the original, in a ${scene} scene, ` +
-      `painterly oil-painting style, gallery quality, high detail.`
+    SCENE_PROMPTS[scene] ?? [
+      IDENTITY_PREFIX +
+        `Place the dog in a ${scene} scene, painterly oil-painting style, gallery quality, high detail.`,
+      IDENTITY_PREFIX +
+        `Place the dog in a ${scene} scene from a different angle and time of day, ` +
+        `impressionist painting style, gallery quality, high detail.`,
+    ]
   );
 }
 
@@ -61,6 +77,51 @@ async function falFetch(url, options = {}) {
   return res.json();
 }
 
+async function falGenerateOne(prompt, dataUri) {
+  const submitted = await falFetch(FAL_QUEUE_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      image_urls: [dataUri],
+      num_images: 1,
+      image_size: { width: 2048, height: 2048 },
+      enable_safety_checker: true,
+    }),
+  });
+
+  const statusUrl = submitted.status_url;
+  const responseUrl = submitted.response_url;
+  if (!statusUrl || !responseUrl) {
+    throw new Error(`fal.ai queue submit returned no status/response URL: ${JSON.stringify(submitted).slice(0, 300)}`);
+  }
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  for (;;) {
+    const status = await falFetch(statusUrl);
+    if (status.status === "COMPLETED") break;
+    if (status.status !== "IN_QUEUE" && status.status !== "IN_PROGRESS") {
+      throw new Error(`fal.ai job ended with status ${status.status}`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error("fal.ai generation timed out");
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+
+  const result = await falFetch(responseUrl);
+  const image = result.images?.[0];
+  if (!image) {
+    throw new Error(`fal.ai returned no images: ${JSON.stringify(result).slice(0, 300)}`);
+  }
+
+  const res = await fetch(image.url);
+  if (!res.ok) {
+    throw new Error(`Failed to download generated image (${res.status})`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, mime: res.headers.get("content-type") ?? "image/jpeg" };
+}
+
 /** @type {AiPortraitProvider} */
 export const falSeedreamProvider = {
   async generate({ photo, scene }) {
@@ -73,52 +134,9 @@ export const falSeedreamProvider = {
       .toBuffer();
     const dataUri = `data:image/jpeg;base64,${prepped.toString("base64")}`;
 
-    const submitted = await falFetch(FAL_QUEUE_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        prompt: promptFor(scene),
-        image_urls: [dataUri],
-        num_images: NUM_VARIANTS,
-        image_size: { width: 2048, height: 2048 },
-        enable_safety_checker: true,
-      }),
-    });
-
-    const statusUrl = submitted.status_url;
-    const responseUrl = submitted.response_url;
-    if (!statusUrl || !responseUrl) {
-      throw new Error(`fal.ai queue submit returned no status/response URL: ${JSON.stringify(submitted).slice(0, 300)}`);
-    }
-
-    const deadline = Date.now() + POLL_TIMEOUT_MS;
-    for (;;) {
-      const status = await falFetch(statusUrl);
-      if (status.status === "COMPLETED") break;
-      if (status.status !== "IN_QUEUE" && status.status !== "IN_PROGRESS") {
-        throw new Error(`fal.ai job ended with status ${status.status}`);
-      }
-      if (Date.now() > deadline) {
-        throw new Error("fal.ai generation timed out");
-      }
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    }
-
-    const result = await falFetch(responseUrl);
-    const images = result.images ?? [];
-    if (!images.length) {
-      throw new Error(`fal.ai returned no images: ${JSON.stringify(result).slice(0, 300)}`);
-    }
-
-    return Promise.all(
-      images.map(async (image) => {
-        const res = await fetch(image.url);
-        if (!res.ok) {
-          throw new Error(`Failed to download generated image (${res.status})`);
-        }
-        const buffer = Buffer.from(await res.arrayBuffer());
-        return { buffer, mime: res.headers.get("content-type") ?? "image/jpeg" };
-      }),
-    );
+    // Two distinct prompts, generated in parallel — the customer picks between
+    // genuinely different scenes rather than near-duplicate variations.
+    return Promise.all(promptsFor(scene).map((prompt) => falGenerateOne(prompt, dataUri)));
   },
 };
 
