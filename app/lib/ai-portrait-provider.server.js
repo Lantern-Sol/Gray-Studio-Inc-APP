@@ -20,6 +20,10 @@ const FAL_QUEUE_URL = "https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit";
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 120000;
 
+// How many preview options each upload generates (~$0.03/image).
+// Set to 2 to bring back the two-scene choice (balcony/café, lavender/village).
+const PREVIEW_COUNT = 1;
+
 const IDENTITY_PREFIX =
   "Transform this photo into an elegant fine-art portrait of the exact same dog, " +
   "keeping its face, fur colors and markings faithful to the original. ";
@@ -134,9 +138,13 @@ export const falSeedreamProvider = {
       .toBuffer();
     const dataUri = `data:image/jpeg;base64,${prepped.toString("base64")}`;
 
-    // Two distinct prompts, generated in parallel — the customer picks between
-    // genuinely different scenes rather than near-duplicate variations.
-    return Promise.all(promptsFor(scene).map((prompt) => falGenerateOne(prompt, dataUri)));
+    // Distinct prompts generated in parallel — with PREVIEW_COUNT 2 the customer
+    // picks between genuinely different scenes rather than near-duplicate variations.
+    return Promise.all(
+      promptsFor(scene)
+        .slice(0, PREVIEW_COUNT)
+        .map((prompt) => falGenerateOne(prompt, dataUri)),
+    );
   },
 };
 
@@ -166,7 +174,7 @@ export const mockAiPortraitProvider = {
     ];
 
     const variants = await Promise.all(
-      variantSpecs.map(async (spec) => {
+      variantSpecs.slice(0, PREVIEW_COUNT).map(async (spec) => {
         const buffer = await sharp(photo)
           .resize(1024, 1024, { fit: "cover" })
           .modulate(spec.modulate)
